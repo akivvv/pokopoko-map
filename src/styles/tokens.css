@@ -1,0 +1,46 @@
+/*
+ * ポコポップ デザイントークン
+ * 正本: docs/spec/DECISIONS.md §7(UIデザイン「ポコポップ」)
+ * コンポーネントには生の色値を書かず、必ずこのトークンを参照する。
+ * ダークモードは定義しない(ライトテーマ固定)。
+ */
+
+:root {
+	/* §7 地色 / カード */
+	--color-bg: #fff8ec;
+	--color-card: #ffffff;
+
+	/* §7 インク(文字・枠線)— 黒ではなくこげ茶 */
+	--color-ink: #4a3a32;
+
+	/* §7 プライマリ(オレンジ) */
+	--color-primary: #ffae3d;
+
+	/* §7 セカンダリ(ミント) */
+	--color-secondary: #6fd8c0;
+
+	/* §7 アクセント(ピンク / 空色) */
+	--color-accent-pink: #ff8fab;
+	--color-accent-sky: #69b7e8;
+
+	/* §7 地図地色 / 格子線(インク10%) */
+	--color-map-bg: #e4f0d8;
+	--color-grid-line: rgba(74, 58, 50, 0.1);
+
+	/* §7 枠線 2px */
+	--border-width: 2px;
+
+	/* §7 ハードオフセット影 3px 3px 0(インク85%) */
+	--shadow-hard: 3px 3px 0 rgba(74, 58, 50, 0.85);
+
+	/* §7 角丸: カード 14-16px / ボトムシート 24px / ボタン・ピル 999px */
+	--radius-card: 16px;
+	--radius-sheet: 24px;
+	--radius-pill: 999px;
+
+	/* §7 フォント: Zen Maru Gothic / M PLUS Rounded 1c(self-host サブセット化は別途)
+	   ここではフォールバック定義のみ(システムの丸ゴ系 → 汎用)。数字は tabular-nums を各所で指定 */
+	--font-rounded:
+		"Zen Maru Gothic", "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN",
+		"HG Maru Gothic M PRO", "Yu Gothic UI", meiryo, system-ui, sans-serif;
+}

@@ -15,8 +15,10 @@
 		"test:coverage": "vitest run --coverage"
 	},
 	"dependencies": {
+		"@use-gesture/react": "^10.3.1",
 		"react": "^19.2.7",
-		"react-dom": "^19.2.7"
+		"react-dom": "^19.2.7",
+		"zustand": "^5.0.14"
 	},
 	"optionalDependencies": {
 		"@biomejs/cli-win32-x64": "^2.5.2",
