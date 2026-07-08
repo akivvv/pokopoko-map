@@ -20,7 +20,13 @@ export type MapViewProps = {
 	/** CSS 変数(トークン)を解決した色を親が渡す(src/map に生の色値を持たせない) */
 	readonly colors: MapColors;
 	readonly onCameraChange: (camera: Camera) => void;
+	/** true のとき1本指ドラッグをストロークに割り当てる(draw モード) */
+	readonly drawing?: boolean;
 	readonly onTapCell?: (cell: CellPos) => void;
+	readonly onStrokeStart?: (cell: CellPos) => void;
+	readonly onStrokeMove?: (cell: CellPos) => void;
+	readonly onStrokeEnd?: () => void;
+	readonly onStrokeCancel?: () => void;
 	readonly onPinClick?: (id: PinId) => void;
 	/** ビューポート実寸の通知(親が fitCamera 等の初期化に使う) */
 	readonly onViewportChange?: (viewport: Viewport) => void;
@@ -33,7 +39,12 @@ export function MapView({
 	camera,
 	colors,
 	onCameraChange,
+	drawing,
 	onTapCell,
+	onStrokeStart,
+	onStrokeMove,
+	onStrokeEnd,
+	onStrokeCancel,
 	onPinClick,
 	onViewportChange,
 }: MapViewProps): ReactElement {
@@ -116,7 +127,12 @@ export function MapView({
 		viewport,
 		grid,
 		onCameraChange,
+		drawing,
 		onTapCell,
+		onStrokeStart,
+		onStrokeMove,
+		onStrokeEnd,
+		onStrokeCancel,
 	});
 
 	return (

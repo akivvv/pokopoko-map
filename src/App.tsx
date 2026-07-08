@@ -85,17 +85,26 @@ function App() {
 		[store],
 	);
 
-	const handleTapCell = useCallback(
+	// draw モードではドラッグ(タップ含む)がストロークとして流れてくる。
+	// stroke/end のパッチは backend 未接続のため送信せず、pending が表示を保つ
+	const handleStrokeStart = useCallback(
 		(cell: CellPos) => {
-			const { dispatch, ui } = store.getState();
-			if (ui.mode.kind !== "draw") return;
-			// フェーズ0はタップ1セルの塗り/消しのみ(ドラッグ描画はモード対応ジェスチャで後続)。
-			// stroke/end のパッチは backend 未接続のため送信せず、pending が表示を保つ
-			dispatch({ type: "stroke/start", cell });
-			dispatch({ type: "stroke/end" });
+			store.getState().dispatch({ type: "stroke/start", cell });
 		},
 		[store],
 	);
+	const handleStrokeMove = useCallback(
+		(cell: CellPos) => {
+			store.getState().dispatch({ type: "stroke/move", cell });
+		},
+		[store],
+	);
+	const handleStrokeEnd = useCallback(() => {
+		store.getState().dispatch({ type: "stroke/end" });
+	}, [store]);
+	const handleStrokeCancel = useCallback(() => {
+		store.getState().dispatch({ type: "stroke/cancel" });
+	}, [store]);
 
 	return (
 		<div className="app">
@@ -167,7 +176,11 @@ function App() {
 					camera={camera}
 					colors={colors}
 					onCameraChange={handleCameraChange}
-					onTapCell={handleTapCell}
+					drawing={mode.kind === "draw"}
+					onStrokeStart={handleStrokeStart}
+					onStrokeMove={handleStrokeMove}
+					onStrokeEnd={handleStrokeEnd}
+					onStrokeCancel={handleStrokeCancel}
 					onViewportChange={handleViewportChange}
 				/>
 			</main>
