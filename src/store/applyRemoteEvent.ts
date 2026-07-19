@@ -3,7 +3,7 @@
 // 不正データは黙って捨てる: Rules の検証をすり抜けた・旧形式が混ざった場合でも
 // クライアントを壊さないため(親コンポーネント側での通知等はしない)。
 
-import type { Pin, PinId } from "../domain/types";
+import type { CellKey, HexColor, Pin, PinId } from "../domain/types";
 import { cellKey, isValidHexColor, parseCellKey } from "../domain/types";
 import type { MapMeta, RemoteSlice } from "./state";
 
@@ -22,7 +22,17 @@ export type RemoteEvent =
 	| { readonly type: "pin/added"; readonly pin: Pin }
 	| { readonly type: "pin/changed"; readonly pin: Pin }
 	| { readonly type: "pin/removed"; readonly id: PinId }
-	| { readonly type: "meta/changed"; readonly meta: MapMeta };
+	| { readonly type: "meta/changed"; readonly meta: MapMeta }
+	| {
+			/**
+			 * 起動シーケンスの一括上書き(DECISIONS §5: キャッシュ即表示 → get() で上書き)。
+			 * remote の pixels/pins を丸ごと置き換える(キャッシュにだけある削除済みセルを消すため
+			 * 差分イベントでは代替できない)。grid を変える場合は先に meta/changed を適用すること
+			 */
+			readonly type: "snapshot/replaced";
+			readonly pixels: Readonly<Record<string, string>>;
+			readonly pins: readonly Pin[];
+	  };
 
 export function applyRemoteEvent(
 	remote: RemoteSlice,
@@ -70,6 +80,23 @@ export function applyRemoteEvent(
 			}
 			if (remote.mapMeta.grid === event.meta.grid) return remote;
 			return { ...remote, mapMeta: { grid: event.meta.grid } };
+		}
+		case "snapshot/replaced": {
+			// エントリ単位の検証は差分イベントと同一基準(不正データは黙って捨てる)
+			const pixels: Record<CellKey, HexColor> = {};
+			for (const [key, value] of Object.entries(event.pixels)) {
+				const cell = parseCellKey(key, remote.mapMeta.grid);
+				if (cell === null || !isValidHexColor(value)) continue;
+				pixels[cellKey(cell)] = value;
+			}
+			const pins: Record<PinId, Pin> = {};
+			for (const pin of event.pins) {
+				if (parseCellKey(cellKey(pin.pos), remote.mapMeta.grid) === null) {
+					continue;
+				}
+				pins[pin.id] = pin;
+			}
+			return { ...remote, pixels, pins };
 		}
 	}
 }

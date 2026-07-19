@@ -1,6 +1,19 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import App from "./App";
+
+// App は起動時に Firebase サインイン+RTDB 接続を張るため、テストでは sync を
+// まるごとモックする(sync 自体のテストは mapSync.test.ts が fake アダプタで行う)
+vi.mock("./sync", () => ({
+	ensureSignedIn: () => Promise.resolve("test-uid"),
+	getDb: () => ({}),
+	createFirebaseRtdbAdapter: () => ({}),
+	connectMapSync: () => ({
+		sendPatch: () => {},
+		disconnect: () => {},
+		ready: Promise.resolve(),
+	}),
+}));
 
 describe("App", () => {
 	it("モード切替ボタンを表示し、初期は view モード", () => {

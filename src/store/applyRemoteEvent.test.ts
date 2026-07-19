@@ -163,6 +163,65 @@ describe("applyRemoteEvent: pins", () => {
 	});
 });
 
+describe("applyRemoteEvent: snapshot", () => {
+	it("snapshot/replaced で pixels/pins が丸ごと置き換わる(古いエントリは残らない)", () => {
+		const base = makeRemote({
+			pixels: { "1,1": "#111111", "2,2": "#222222" },
+			pins: { old: makePin({ id: "old" }) },
+		});
+		const pin = makePin({ id: "new" });
+		const next = applyRemoteEvent(base, {
+			type: "snapshot/replaced",
+			pixels: { "3,4": "#ff0000" },
+			pins: [pin],
+		});
+		expect(next.pixels).toEqual({ "3,4": "#ff0000" });
+		expect(next.pins).toEqual({ new: pin });
+	});
+
+	it("空の snapshot で全消去になる(キャッシュ残骸の掃除)", () => {
+		const base = makeRemote({
+			pixels: { "1,1": "#111111" },
+			pins: { pin1: makePin() },
+		});
+		const next = applyRemoteEvent(base, {
+			type: "snapshot/replaced",
+			pixels: {},
+			pins: [],
+		});
+		expect(next.pixels).toEqual({});
+		expect(next.pins).toEqual({});
+	});
+
+	it("不正なエントリは差分イベントと同一基準で捨てる", () => {
+		const next = applyRemoteEvent(makeRemote(), {
+			type: "snapshot/replaced",
+			pixels: {
+				"3,4": "#ff0000",
+				"a,b": "#ff0000",
+				[`${GRID},0`]: "#ff0000",
+				"5,5": "red",
+			},
+			pins: [makePin(), makePin({ id: "out", pos: { gx: GRID, gy: 0 } })],
+		});
+		expect(next.pixels).toEqual({ "3,4": "#ff0000" });
+		expect(Object.keys(next.pins)).toEqual(["pin1"]);
+	});
+
+	it("meta/changed で grid を広げてから適用すれば広い座標も受理される", () => {
+		const wide = applyRemoteEvent(makeRemote(), {
+			type: "meta/changed",
+			meta: { grid: GRID + 10 },
+		});
+		const next = applyRemoteEvent(wide, {
+			type: "snapshot/replaced",
+			pixels: { [`${GRID},0`]: "#ff0000" },
+			pins: [],
+		});
+		expect(next.pixels[`${GRID},0`]).toBe("#ff0000");
+	});
+});
+
 describe("applyRemoteEvent: meta", () => {
 	it("meta/changed で grid が更新される", () => {
 		const next = applyRemoteEvent(makeRemote(), {

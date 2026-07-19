@@ -1,0 +1,129 @@
+// Realtime Database Security Rules(DECISIONS §4)。信頼境界はここ(クライアント JS を信頼しない)。
+// このファイルが正本。変更したら Firebase コンソールの Rules タブへ貼り付けて公開する
+// (firebase.json で CLI デプロイにも対応)。コメントは Firebase の JSON パーサが許容する。
+//
+// 方針:
+// - ルールを書いていないパスは既定で拒否。roomCodes(招待コード→roomId)は
+//   Admin SDK 専用領域なので、あえて一切ルールを書かない=全拒否
+// - members への登録は認証サーバー(Admin SDK)のみ。クライアントは自分の name だけ変更できる
+// - snapshots / log はクライアント書き込み方式(改ざん耐性なしは身内利用前提で許容。§4)。
+//   詳細な .validate は当該機能の実装フェーズで固める
+{
+	"rules": {
+		"rooms": {
+			"$roomId": {
+				// メンバーシップ制: members/<auth.uid> が存在するときだけ部屋を読める(§4)
+				".read": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()",
+				"meta": {
+					// createdAt は部屋作成時に Admin SDK が書く。クライアントは forceDelete のみ
+					"forceDelete": {
+						".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()",
+						".validate": "newData.isBoolean()"
+					},
+					"createdAt": {
+						".validate": "newData.isNumber()"
+					},
+					"$other": { ".validate": false }
+				},
+				"members": {
+					"$uid": {
+						// 登録(レコード作成)は Admin SDK のみ。既存メンバー本人だけが name を変更できる
+						// (data.parent().exists() が「登録済み」の判定。これがないと name 書き込みで自己入室できてしまう)
+						"name": {
+							".write": "auth != null && auth.uid === $uid && data.parent().exists()",
+							".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
+						},
+						"$other": { ".validate": false }
+					}
+				},
+				"maps": {
+					"$mapId": {
+						"meta": {
+							// grid の初期化・変更は Admin SDK / コンソールのみ(クライアント書き込み不可)
+							"grid": {
+								".validate": "newData.isNumber() && newData.val() > 0"
+							},
+							"$other": { ".validate": false }
+						},
+						"pixels": {
+							// ストロークのパッチ update() がここに来る(null=削除は .validate を通らず .write だけで判定される)
+							".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()",
+							"$cell": {
+								// キーは "gx,gy"(先頭ゼロなしの非負整数)、値は #rrggbb のみ(§4)
+								".validate": "$cell.matches(/^(0|[1-9][0-9]*),(0|[1-9][0-9]*)$/) && newData.isString() && newData.val().matches(/^#[0-9a-fA-F]{6}$/)"
+							}
+						},
+						"pins": {
+							"$pinId": {
+								// 作成・編集はメンバーなら誰でも。削除は authorId 本人か forceDelete 時のみ(§4 削除保護)
+								".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists() && (newData.exists() || data.child('authorId').val() === auth.uid || root.child('rooms').child($roomId).child('meta').child('forceDelete').val() === true)",
+								".validate": "newData.hasChildren(['pos', 'name', 'emoji', 'authorId', 'createdAt'])",
+								"pos": {
+									".validate": "newData.hasChildren(['gx', 'gy'])",
+									"gx": {
+										".validate": "newData.isNumber() && newData.val() >= 0"
+									},
+									"gy": {
+										".validate": "newData.isNumber() && newData.val() >= 0"
+									},
+									"$other": { ".validate": false }
+								},
+								"name": {
+									".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 50"
+								},
+								"emoji": {
+									".validate": "newData.isString() && newData.val().length <= 20"
+								},
+								"desc": {
+									".validate": "newData.isString() && newData.val().length <= 500"
+								},
+								"parentId": { ".validate": "newData.isString()" },
+								"residents": {
+									"$index": {
+										".validate": "newData.isNumber() && newData.val() > 0"
+									}
+								},
+								// 作成時は自分の uid、編集時は元の authorId を維持(なりすまし・横取りの禁止)
+								"authorId": {
+									".validate": "(data.parent().exists() && newData.val() === data.parent().child('authorId').val()) || (!data.parent().exists() && newData.val() === auth.uid)"
+								},
+								"createdAt": { ".validate": "newData.isNumber()" },
+								"$other": { ".validate": false }
+							}
+						},
+						"$other": { ".validate": false }
+					}
+				},
+				// 1匹1住処の占有インデックス(§3)。transaction() で書く
+				"pokemonLocations": {
+					"$pokemonNo": {
+						".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()",
+						".validate": "$pokemonNo.matches(/^[1-9][0-9]*$/) && newData.hasChildren(['pinId', 'authorId'])",
+						"pinId": { ".validate": "newData.isString()" },
+						"authorId": { ".validate": "newData.isString()" },
+						"$other": { ".validate": false }
+					}
+				},
+				// 日次スナップショット(§5: クライアント書き込み・14日保持)。詳細検証は実装フェーズで
+				"snapshots": {
+					"$date": {
+						".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()"
+					}
+				},
+				// 破壊的操作のログ(§5: 直近200件へ書き込み時に間引き)。詳細検証は実装フェーズで
+				"log": {
+					"$entryId": {
+						".write": "auth != null && root.child('rooms').child($roomId).child('members').child(auth.uid).exists()"
+					}
+				},
+				"$other": { ".validate": false }
+			}
+		},
+		// 部屋一覧の逆引き(§3)。読みは本人のみ、書きは Admin SDK のみ(§4)
+		"userRooms": {
+			"$uid": {
+				".read": "auth != null && auth.uid === $uid"
+			}
+		}
+	}
+}

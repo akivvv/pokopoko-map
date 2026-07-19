@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./App.css";
 import type { Camera, Viewport } from "./domain/camera";
 import { fitCamera } from "./domain/camera";
@@ -7,6 +7,13 @@ import { MapView } from "./map/MapView";
 import type { MapColors } from "./map/render";
 import type { MapStore } from "./store";
 import { createMapStore, selectVisiblePixels, useMapStore } from "./store";
+import type { MapSync } from "./sync";
+import {
+	connectMapSync,
+	createFirebaseRtdbAdapter,
+	ensureSignedIn,
+	getDb,
+} from "./sync";
 
 /**
  * maps/<mapId>/meta.grid の初期値(DECISIONS §3: 初期46)。
@@ -17,6 +24,13 @@ const INITIAL_GRID = 46;
 
 /** 当面1マップ運用(DECISIONS §3。階層のみ確保) */
 const MAP_ID = "main";
+
+/**
+ * 入室フロー(部屋一覧・招待コード。DECISIONS §8)実装までの暫定の固定部屋。
+ * Security Rules はメンバーシップ制のため、dev では rooms/dev/members/<uid> を
+ * コンソールから手動登録して使う(uid は起動時に console.info で出る)
+ */
+const ROOM_ID = "dev";
 
 /** ユーザーが塗る内容色の暫定パレット(UIトークンではなく地図の中身。旧版の色UI移植までの仮) */
 const DEMO_PALETTE = [
@@ -45,6 +59,38 @@ function App() {
 	// (store.subscribe + rAF)は Firebase 接続時に導入する
 	const state = useMapStore(store, (s) => s);
 	const [colors] = useState(resolveMapColors);
+
+	// RTDB 同期: サインイン(暫定は匿名)→ 接続。失敗時はオフラインのまま動き続ける
+	const syncRef = useRef<MapSync | null>(null);
+	useEffect(() => {
+		let disposed = false;
+		let sync: MapSync | null = null;
+		(async () => {
+			let uid: string;
+			try {
+				uid = await ensureSignedIn();
+			} catch (error) {
+				console.error("pokomap: サインインに失敗(オフラインで続行)", error);
+				return;
+			}
+			if (disposed) return;
+			// dev: Security Rules のメンバー登録(rooms/dev/members/<uid>)に使う
+			console.info(`pokomap: uid=${uid}`);
+			sync = connectMapSync({
+				adapter: createFirebaseRtdbAdapter(getDb()),
+				store,
+				roomId: ROOM_ID,
+				mapId: MAP_ID,
+				storage: localStorage,
+			});
+			syncRef.current = sync;
+		})();
+		return () => {
+			disposed = true;
+			syncRef.current = null;
+			sync?.disconnect();
+		};
+	}, [store]);
 
 	const { mode, camera } = state.ui;
 	const grid = state.remote.mapMeta.grid;
@@ -86,7 +132,8 @@ function App() {
 	);
 
 	// draw モードではドラッグ(タップ含む)がストロークとして流れてくる。
-	// stroke/end のパッチは backend 未接続のため送信せず、pending が表示を保つ
+	// stroke/end のパッチは RTDB へ送信し、エコーバック確認までは pending が表示を保つ。
+	// 未接続(サインイン失敗等)なら送信されず pending が残る=ローカルでは描ける
 	const handleStrokeStart = useCallback(
 		(cell: CellPos) => {
 			store.getState().dispatch({ type: "stroke/start", cell });
@@ -100,7 +147,8 @@ function App() {
 		[store],
 	);
 	const handleStrokeEnd = useCallback(() => {
-		store.getState().dispatch({ type: "stroke/end" });
+		const patch = store.getState().dispatch({ type: "stroke/end" });
+		if (patch !== null) syncRef.current?.sendPatch(patch);
 	}, [store]);
 	const handleStrokeCancel = useCallback(() => {
 		store.getState().dispatch({ type: "stroke/cancel" });

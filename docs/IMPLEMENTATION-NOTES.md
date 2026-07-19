@@ -25,12 +25,35 @@
 
 ## Deviations
 
+### 2026-07-18: フェーズ1の同期は §5 のうちスナップショット・ログを未実装
+- 計画: 同期・キャッシュ一式(DECISIONS §5: 差分購読・パッチ送信・localStorage キャッシュ・
+  日次スナップショット・ログ間引き)
+- 実際: 差分購読(get→snapshot/replaced→onChild*)・パッチ送信+エコーバック確認・
+  localStorage キャッシュまで実装。日次スナップショット・ログ間引きは未実装。
+  Security Rules も snapshots / log の `.validate` はメンバー書き込み許可のみの暫定
+- 理由: ログの記録対象(破壊的操作=ピン削除等)とスナップショット対象のピン機能が未実装で、
+  対象データが生まれるフェーズで実装したほうが手戻りがない
+- 影響: 機能未提供のみ(データ構造・既存モジュールへの影響なし)。ピン機能実装フェーズで追加する
+- 状態: 暫定(要再検討)
+
+### 2026-07-18: 入室フローの代わりに固定部屋 dev+手動メンバー登録+匿名認証のみ
+- 計画: Google/匿名ログイン → 部屋一覧 → 招待コードで入室(DECISIONS §2, §8)。
+  members 登録は認証サーバー(Admin SDK)
+- 実際: App は固定 `ROOM_ID = "dev"` に接続し、サインインは `signInAnonymously` のみ。
+  メンバー登録は Firebase コンソールから `rooms/dev/members/<uid>` を手動作成する運用
+  (uid は起動時に console.info で表示)
+- 理由: 認証サーバー・入室 UI は後続フェーズ。同期層の実機検証に必要な最小限だけ先行させた。
+  Rules はこの運用でも本実装と同一(手動登録が Admin SDK の代役)で、緩めていない
+- 影響: App.tsx の定数と起動シーケンスのみ。入室フロー実装時に置き換える
+- 状態: 暫定(要再検討)
+
 ### 2026-07-07: canvas 再描画が store.subscribe 直結でなく React props 経由
 - 計画: canvas は `store.subscribe`(React 外)+ rAF バッチで再描画する(DECISIONS §6)
 - 実際: rAF バッチは MapView 内に実装済みだが、pixels 等の入力は App が useMapStore で購読して props で渡している(再描画のトリガーが React の再レンダリング)
 - 理由: フェーズ0は Firebase 未接続で高頻度のセル差分が発生せず、ストア設計(vanilla store なので subscribe 可能)と MapView の props 境界を先に固めることを優先した
 - 影響: 描画性能のみ(機能・データへの影響なし)。Firebase 接続でセル差分が高頻度になる段階で、App の全スライス購読を canvas 直結購読に差し替える
-- 状態: 暫定(要再検討: Firebase 接続時に解消予定)
+- 状態: 暫定(要再検討)。2026-07-18 追記: フェーズ1で Firebase 接続したが、想定人数(2〜4人)の
+  描画頻度では props 経由でも問題が出ていないため据え置き。実測で描画が重くなった時点で差し替える
 
 ### 2026-07-07: pokemon-list.json のコピー時に Biome 整形のみ適用
 - 計画: 旧リポジトリ(pokomap-web)の pokemon-list.json をそのままコピーする
